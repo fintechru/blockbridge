@@ -6,151 +6,154 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./ValidatorList.sol";
 
 contract Mastermost is ValidatorList {
-    uint256 public totalSupply;
+    uint256 protocolVersion = 1;
+    //todo сделать справочник
+    bytes32 source_chain_id =
+        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    enum Status {
+    enum MessageStatus {
         created,
         done,
         canceled
     }
 
-    struct Deal {
-        address[] confirmations;
-        uint256 tokenNum;
-        bytes32 networkId;
-        address sender;
-        address recipient;
-        Status status;
-        // mapping(address => Status) status;
+    enum MessageType {
+        read,
+        write
     }
 
-    mapping(bytes32 => Deal) validatorConfirmations;
-    // отображение хеша сделки на адрес инициатора сделки
-    mapping(bytes32 => address) deals;
-    mapping(address => uint256) balance;
+    struct Message {
+        uint256 version;
+        bytes32 source_chain_id;
+        bytes32 destination_chain_id;
+        bytes32 messageId;
+        address sender_address;
+        address executor_address;
+        MessageType datatype;
+        bytes4 method;
+        bytes32 params;
+        address[] confirmations;
+        MessageStatus messageStatus;
+    }
 
-    event SimpleDealInited(address who, bytes32 dealHash);
-    event DetailedDealInited(
-        bytes32 networkId,
-        address recipient,
-        address sender,
-        uint256 tokenNum
-    );
+    // подтверждения Валидаторов под сообщением
+    mapping(bytes32 => Message) messages;
 
-    event SimpleDealConfirmed(bytes32 dealHash);
-    event DetailedDealConfirmed(
-        bytes32 networkId,
-        address recipient,
-        address sender,
-        uint256 tokenNum
-    );
-    event DealNotConfirmed(bytes32 dealHash);
-    event DealCanceled(bytes32 dealHash);
+    event MessageCreated(Message message);
+    event MessageConfirmed(bytes32 messageId);
+    event MessageDeclined();
+    event ReturnDataToRemoteSender(Message message);
+
+    modifier checkIncomeMessage(Message memory message) {
+        //todo: проверка версии протокола
+        //todo: проверка сетей по белым и чёрным спискам
+        //todo: проверка адресов указаных в сообщениях
+        //todo: проверка метода и параметров на формат
+
+        require(true, "Isnot correct Message");
+        _;
+    }
 
     constructor() {
         validators[msg.sender] = true;
     }
 
-    // Создать сделку указав только хеш значимых данных - hash(сумма перевода, сеть назначения, адрес получателя)
-    function initDealByHash(bytes32 dealHash) public {
-        require(dealHash != 0, "ERROR: hash is empty");
-        require(msg.sender != address(0), "ERROR: address is empty");
-
-        deals[dealHash] = msg.sender;
-        emit SimpleDealInited(msg.sender, dealHash);
-    }
-
-    ///@dev Создание сделки со значимой информацией
-    function initDealByValue(
-        uint256 _tokenNum,
-        bytes32 _networkId,
-        address _recipient
-    ) public {
-        bytes32 dealHash = keccak256(
-            abi.encodePacked(_tokenNum, _networkId, _recipient)
-        );
-
-        address[] memory emptyAddressList;
-
-        validatorConfirmations[dealHash] = Deal({
-            confirmations: emptyAddressList,
-            tokenNum: _tokenNum,
-            networkId: _networkId,
-            sender: msg.sender,
-            recipient: _recipient,
-            status: Status.created
-        });
-
-        deals[dealHash] = msg.sender;
-
-        emit DetailedDealInited(_networkId, _recipient, msg.sender, _tokenNum);
-    }
-
-    ///@dev подтверждение сделки валидатором - сделать модификатор
-    function confirmDeal(bytes32 dealHash) public {
-        // проверяем существует ли сделка
-        require(deals[dealHash] != address(0), "ERROR: deal doesn't exists");
-        // проверяем является отправитель подтверждающим
-        require(_isValidator(msg.sender), "ERROR: deal doesn't exists");
-
-        Deal storage deal = validatorConfirmations[dealHash];
-
-        uint256 valNum = validatorNum();
-        uint256 confirmations = deal.confirmations.length;
-
-        if (valNum == confirmations + 1) {
-            deal.confirmations.push(msg.sender);
-            deal.status = Status.done;
-            emit DetailedDealConfirmed(
-                deal.networkId,
-                deal.recipient,
-                deal.sender,
-                deal.tokenNum
-            );
-        } else {
-            deal.confirmations.push(msg.sender);
-        }
-    }
-
-    // проверить сделку по ID
-    function checkDeal(bytes32 dealHash) public returns (bool) {
-        Deal memory deal = validatorConfirmations[dealHash];
-        uint256 valNum = validatorNum();
-        uint256 confirmations = deal.confirmations.length;
-
-        if (valNum == confirmations) {
-            emit SimpleDealConfirmed(dealHash);
-            return true;
-        }
-
-        emit DealNotConfirmed(dealHash);
-        return false;
-    }
-
-    function cancelDeal(bytes32 dealHash) public returns (bool) {
-        // прошло время финализации сделки
-        Deal storage deal = validatorConfirmations[dealHash];
-        uint256 valNum = validatorNum();
-
-        if (deal.confirmations.length < valNum) {
-            balance[deal.sender] += deal.tokenNum;
-            deal.status = Status.canceled;
-            emit DealCanceled(dealHash);
-            return true;
-        }
-
-        return false;
-    }
-
-    function getAddrByDealHash(bytes32 dealHash) public view returns (address) {
-        return deals[dealHash];
-    }
-
-    function addValidator(address validator) public {
+    function addValidator(address validator) public onlyOwner {
         _addValidator(validator);
     }
 
-    function isValidator(address validator) public view returns (bool) {
-        return _isValidator(validator);
+    ///@dev функция создания системного сообытия со значимой для Оракуа информацией
+    function initNewMessage(
+        bytes32 _destination_chain_id,
+        address _executor_address,
+        MessageType _msgType,
+        bytes4 _method,
+        bytes32 _params
+    ) public {
+        //todo: добавить случайность
+        bytes32 _messageId = keccak256(
+            abi.encodePacked(
+                protocolVersion,
+                source_chain_id,
+                _destination_chain_id,
+                msg.sender,
+                _executor_address,
+                _msgType,
+                _method,
+                _params
+            )
+        );
+        address[] memory emptyAddressList;
+
+        Message memory message = Message({
+            version: protocolVersion,
+            source_chain_id: source_chain_id,
+            destination_chain_id: _destination_chain_id,
+            messageId: _messageId,
+            sender_address: msg.sender,
+            executor_address: _executor_address,
+            datatype: _msgType,
+            method: _method,
+            params: _params,
+            confirmations: emptyAddressList,
+            messageStatus: MessageStatus.created
+        });
+
+        messages[_messageId] = message;
+
+        emit MessageCreated(message);
+    }
+
+    // проверить сделку по ID
+    function confirmMessage(bytes32 messageId) public onlyValidator {
+        Message storage message = messages[messageId];
+        uint256 valNum = validatorNum();
+        uint256 confirmations = message.confirmations.length;
+
+        if (valNum == confirmations + 1) {
+            message.confirmations.push(msg.sender);
+            message.messageStatus = MessageStatus.done;
+            emit MessageConfirmed(messageId);
+        } else {
+            message.confirmations.push(msg.sender);
+        }
+    }
+
+    /// @dev функция приёма внешнего сообщения и вызова метода
+    function serveInputMessage(Message memory inputMessage)
+        public
+        checkIncomeMessage(inputMessage)
+    {
+        // todo: подтверждение валидаторами приход нового сообщения
+        // message.executor_address.call(message.method, message.params);
+        (bool result, bytes memory data) = inputMessage.executor_address.call(
+            abi.encode(inputMessage.method, inputMessage.params)
+        );
+
+        bytes4 remoteMethod = bytes4(keccak256("getInputFromRemoteSC(bytes)"));
+
+        if (inputMessage.datatype == MessageType.read) {
+            if (result) {
+                initNewMessage(
+                    inputMessage.source_chain_id,
+                    inputMessage.sender_address,
+                    MessageType.write,
+                    remoteMethod,
+                    bytesToBytes32Array(data)
+                );
+            } else {
+                //todo: отправить сообщение что что-то пошло не так
+            }
+        }
+    }
+
+    function bytesToBytes32Array(bytes memory data)
+        public
+        pure
+        returns (bytes32 result)
+    {
+        assembly {
+            result := mload(add(data, 32))
+        }
     }
 }
