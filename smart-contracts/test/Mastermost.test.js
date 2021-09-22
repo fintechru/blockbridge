@@ -1,19 +1,118 @@
-const { expect } = require("chai");
+const { expect, use } = require("chai");
+const { ethers } = require("hardhat");
+const { deployContract, MockProvider, solidity } = require("ethereum-waffle");
+const mastermost_json = require('../artifacts/contracts/Mastermost.sol/Mastermost.json');
+const { soliditySha3 } = require("web3-utils");
 
-describe("Mastermost", function () {
-    it("Should return total supply if deploy successful", async function () {
-        const Mastermost = await ethers.getContractFactory("Mastermost");
-        const mastermost = await Mastermost.deploy();
-        await mastermost.deployed();
+use(solidity)
 
-        expect(await mastermost.totalSupply()).to.equal(1000);
+describe("Тестирование смарт-контракта Мастермоста...", function () {
+
+    let mastermost_inst;
+    const [wallet, wallet1, wallet2] = new MockProvider().getWallets()
+
+    beforeEach(async () => {
+        mastermost_inst = await deployContract(wallet, mastermost_json);
     });
 
-    it("Should return total supply if deploy successful", async function () {
-        const Mastermost = await ethers.getContractFactory("Mastermost");
-        const mastermost = await Mastermost.deploy();
-        await mastermost.deployed();
+    it("Создание сделки на основе хеша от значимых данных", async function () {
 
-        expect(await mastermost.totalSupply()).to.equal(1000);
+        let hash = ethers.utils.formatBytes32String("user");
+
+        const setTx = await mastermost_inst.connect(wallet).initDealByHash(hash);
+
+        // ждём когда tx расположится
+        await setTx.wait();
+
+        expect(await mastermost_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
+
     });
+
+    it("Создание сделки со значимой информацией", async function () {
+
+        let _tokenNum = 1000;
+        let _networkId = ethers.utils.formatBytes32String("masterchain")
+        let _recipient = wallet1.address;
+
+        const hash = soliditySha3(
+            _tokenNum,
+            _networkId,
+            _recipient
+        );
+
+        const tx = await mastermost_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
+
+        // ждём когда tx расположится
+        await tx.wait();
+
+        expect(await mastermost_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
+
+    });
+
+    it("Добавление валидатора", async function () {
+
+        const tx = await mastermost_inst.connect(wallet).addValidator(wallet1.address);
+        await tx.wait();
+
+        expect(await mastermost_inst.isValidator(wallet1.address)).to.be.equal(true);
+
+    });
+
+    it("Подтверждение существующей сделки валидатором", async function () {
+
+        let _tokenNum = 1000;
+        let _networkId = ethers.utils.formatBytes32String("masterchain")
+        let _recipient = wallet1.address;
+
+        const hash = soliditySha3(
+            _tokenNum,
+            _networkId,
+            _recipient
+        );
+
+        const tx1 = await mastermost_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
+        await tx1.wait();
+
+        const tx2 = await mastermost_inst.connect(wallet).confirmDeal(hash);
+        await tx2.wait();
+
+        expect(await mastermost_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
+
+    });
+
+    it("Подтверждение НЕ существующей сделки валидатором", async function () {
+
+        let _tokenNum = 1000;
+        let _networkId = ethers.utils.formatBytes32String("ethereum")
+        let _recipient = wallet1.address;
+
+        const hash = soliditySha3(
+            _tokenNum,
+            _networkId,
+            _recipient
+        );
+
+        await expect(mastermost_inst.connect(wallet1).confirmDeal(hash)).to.be.reverted;
+
+    });
+
+    it("Подтверждение существующей сделки НЕ валидатором", async function () {
+
+        let _tokenNum = 1000;
+        let _networkId = ethers.utils.formatBytes32String("masterchain")
+        let _recipient = wallet1.address;
+
+        const hash = soliditySha3(
+            _tokenNum,
+            _networkId,
+            _recipient
+        );
+
+        const tx1 = await mastermost_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
+        await tx1.wait();
+
+        await expect(mastermost_inst.connect(wallet2).confirmDeal(hash)).to.be.reverted;
+
+    });
+
 });

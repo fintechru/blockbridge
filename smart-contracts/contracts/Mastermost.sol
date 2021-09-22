@@ -25,6 +25,7 @@ contract Mastermost is ValidatorList {
     }
 
     mapping(bytes32 => Deal) validatorConfirmations;
+    // отображение хеша сделки на адрес инициатора сделки
     mapping(bytes32 => address) deals;
     mapping(address => uint256) balance;
 
@@ -44,22 +45,22 @@ contract Mastermost is ValidatorList {
         uint256 tokenNum
     );
     event DealNotConfirmed(bytes32 dealHash);
-
     event DealCanceled(bytes32 dealHash);
 
     constructor() {
-        totalSupply = 1000;
+        validators[msg.sender] = true;
     }
 
     // Создать сделку указав только хеш значимых данных - hash(сумма перевода, сеть назначения, адрес получателя)
     function initDealByHash(bytes32 dealHash) public {
-        // TODO: проверка адреса инициатора
-        // TODO: проверка хеша на валидность
+        require(dealHash != 0, "ERROR: hash is empty");
+        require(msg.sender != address(0), "ERROR: address is empty");
+
         deals[dealHash] = msg.sender;
         emit SimpleDealInited(msg.sender, dealHash);
     }
 
-    // Создать сделку с данными
+    ///@dev Создание сделки со значимой информацией
     function initDealByValue(
         uint256 _tokenNum,
         bytes32 _networkId,
@@ -70,8 +71,6 @@ contract Mastermost is ValidatorList {
         );
 
         address[] memory emptyAddressList;
-
-        balance[msg.sender] -= _tokenNum;
 
         validatorConfirmations[dealHash] = Deal({
             confirmations: emptyAddressList,
@@ -87,9 +86,13 @@ contract Mastermost is ValidatorList {
         emit DetailedDealInited(_networkId, _recipient, msg.sender, _tokenNum);
     }
 
-    // Подтвердить сделку валидатором
-    function confirmDeal(bytes32 dealHash) public onlyValidator {
-        // проверка статуса сделки
+    ///@dev подтверждение сделки валидатором - сделать модификатор
+    function confirmDeal(bytes32 dealHash) public {
+        // проверяем существует ли сделка
+        require(deals[dealHash] != address(0), "ERROR: deal doesn't exists");
+        // проверяем является отправитель подтверждающим
+        require(_isValidator(msg.sender), "ERROR: deal doesn't exists");
+
         Deal storage deal = validatorConfirmations[dealHash];
 
         uint256 valNum = validatorNum();
@@ -97,7 +100,6 @@ contract Mastermost is ValidatorList {
 
         if (valNum == confirmations + 1) {
             deal.confirmations.push(msg.sender);
-            balance[deal.recipient] += deal.tokenNum;
             deal.status = Status.done;
             emit DetailedDealConfirmed(
                 deal.networkId,
@@ -138,5 +140,17 @@ contract Mastermost is ValidatorList {
         }
 
         return false;
+    }
+
+    function getAddrByDealHash(bytes32 dealHash) public view returns (address) {
+        return deals[dealHash];
+    }
+
+    function addValidator(address validator) public {
+        _addValidator(validator);
+    }
+
+    function isValidator(address validator) public view returns (bool) {
+        return _isValidator(validator);
     }
 }
