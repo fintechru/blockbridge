@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./Mastermost.sol";
 
 contract Deal is Mastermost {
+    uint256 threshold = 3;
+
     enum DealStatus {
         created,
         done,
@@ -116,7 +118,7 @@ contract Deal is Mastermost {
 
         DealDetails storage deal = deals[dealHash];
 
-        uint256 valNum = validatorNum();
+        uint256 valNum = _validatorNum();
         uint256 confirmations = deal.confirmations.length;
 
         if (valNum == confirmations + 1) {
@@ -136,7 +138,7 @@ contract Deal is Mastermost {
     // проверить сделку по ID
     function checkDeal(bytes32 dealHash) public returns (bool) {
         DealDetails memory deal = deals[dealHash];
-        uint256 valNum = validatorNum();
+        uint256 valNum = _validatorNum();
         uint256 confirmations = deal.confirmations.length;
 
         if (valNum == confirmations) {
@@ -151,7 +153,7 @@ contract Deal is Mastermost {
     function cancelDeal(bytes32 dealHash) public returns (bool) {
         // прошло время финализации сделки
         DealDetails storage deal = deals[dealHash];
-        uint256 valNum = validatorNum();
+        uint256 valNum = _validatorNum();
 
         if (deal.confirmations.length < valNum) {
             // balance[deal.sender] += deal.tokenNum;
@@ -165,5 +167,28 @@ contract Deal is Mastermost {
 
     function getAddrByDealHash(bytes32 dealHash) public view returns (address) {
         return dealSenders[dealHash];
+    }
+
+    function isConfirmed(bytes32 dealId) public view returns (bool) {
+        if (deals[dealId].confirmations.length == threshold) return true;
+        else return false;
+    }
+
+    // todo проверка сделки и адреса валидатора
+    // function isConfirmedBy(bytes32 dealId, address validator)
+    //     public
+    //     view
+    //     returns (bool)
+    // {
+    //     address addr = deals[dealId].confirmations;
+    //     return addr;
+    // }
+
+    function confirmationsCount(bytes32 dealId)
+        public
+        view
+        returns (uint256)
+    {
+        return deals[dealId].confirmations.length;
     }
 }

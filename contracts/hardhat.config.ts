@@ -1,6 +1,7 @@
 import '@nomiclabs/hardhat-waffle';
 import '@nomiclabs/hardhat-ethers';
 import 'hardhat-deploy';
+import "hardhat-deploy-ethers";
 
 import * as dotenv from 'dotenv';
 import { HardhatUserConfig } from 'hardhat/config';
@@ -22,6 +23,8 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
+    },
+    localhost: {
     },
     masterchain: {
       url: `https://learn.fintechru.org/masterchange/web3`,

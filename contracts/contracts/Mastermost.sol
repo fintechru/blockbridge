@@ -2,11 +2,12 @@
 
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./ValidatorList.sol";
 
 contract Mastermost is ValidatorList {
     uint256 protocolVersion = 1;
+    bool private switchOn;
+
     //todo сделать справочник
     bytes32 source_chain_id =
         0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
@@ -54,12 +55,15 @@ contract Mastermost is ValidatorList {
         _;
     }
 
-    constructor() {
-        validators[msg.sender] = true;
+    modifier isWorking() {
+        require(switchOn, "ERROR: Mastermost is disabled");
+        _;
     }
 
-    function addValidator(address validator) public onlyOwner {
-        _addValidator(validator);
+    constructor() {
+        addValidator(msg.sender);
+        // owner = msg.sender;
+        switchOn = true;
     }
 
     ///@dev функция создания системного сообытия со значимой для Оракуа информацией
@@ -104,10 +108,10 @@ contract Mastermost is ValidatorList {
         emit MessageCreated(message);
     }
 
-    // проверить сделку по ID
+    // подствердить сделку по ID
     function confirmMessage(bytes32 messageId) public onlyValidator {
         Message storage message = messages[messageId];
-        uint256 valNum = validatorNum();
+        uint256 valNum = _validatorNum();
         uint256 confirmations = message.confirmations.length;
 
         if (valNum == confirmations + 1) {
@@ -155,5 +159,17 @@ contract Mastermost is ValidatorList {
         assembly {
             result := mload(add(data, 32))
         }
+    }
+
+    function getProtocolVersion() public view returns (uint256) {
+        return protocolVersion;
+    }
+
+    function enableBridge() external onlyOwner {
+        switchOn = true;
+    }
+
+    function disableBridge() external onlyOwner {
+        switchOn = false;
     }
 }

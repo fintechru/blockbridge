@@ -2,6 +2,8 @@ const { expect, use } = require("chai");
 const { ethers } = require("hardhat");
 const { deployContract, MockProvider, solidity } = require("ethereum-waffle");
 const mastermost_json = require('../artifacts/contracts/Mastermost.sol/Mastermost.json');
+const deal_json = require('../artifacts/contracts/Deal.sol/Deal.json');
+
 const { soliditySha3 } = require("web3-utils");
 
 use(solidity)
@@ -13,18 +15,19 @@ describe("Тестирование смарт-контракта Мастерм�
 
     beforeEach(async () => {
         mastermost_inst = await deployContract(wallet, mastermost_json);
+        deal_inst = await deployContract(wallet, deal_json);
     });
 
     it("Создание сделки на основе хеша от значимых данных", async function () {
 
         let hash = ethers.utils.formatBytes32String("user");
 
-        const setTx = await mastermost_inst.connect(wallet).initDealByHash(hash);
+        const setTx = await deal_inst.connect(wallet).initDealByHash(hash);
 
         // ждём когда tx расположится
         await setTx.wait();
 
-        expect(await mastermost_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
+        expect(await deal_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
 
     });
 
@@ -40,12 +43,12 @@ describe("Тестирование смарт-контракта Мастерм�
             _recipient
         );
 
-        const tx = await mastermost_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
+        const tx = await deal_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
 
         // ждём когда tx расположится
         await tx.wait();
 
-        expect(await mastermost_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
+        expect(await deal_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
 
     });
 
@@ -70,13 +73,13 @@ describe("Тестирование смарт-контракта Мастерм�
             _recipient
         );
 
-        const tx1 = await mastermost_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
+        const tx1 = await deal_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
         await tx1.wait();
 
-        const tx2 = await mastermost_inst.connect(wallet).confirmDeal(hash);
+        const tx2 = await deal_inst.connect(wallet).confirmDeal(hash);
         await tx2.wait();
 
-        expect(await mastermost_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
+        expect(await deal_inst.getAddrByDealHash(hash)).to.equal(wallet.address);
 
     });
 
@@ -92,7 +95,7 @@ describe("Тестирование смарт-контракта Мастерм�
             _recipient
         );
 
-        await expect(mastermost_inst.connect(wallet1).confirmDeal(hash)).to.be.reverted;
+        await expect(deal_inst.connect(wallet1).confirmDeal(hash)).to.be.reverted;
 
     });
 
@@ -108,10 +111,16 @@ describe("Тестирование смарт-контракта Мастерм�
             _recipient
         );
 
-        const tx1 = await mastermost_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
+        const tx1 = await deal_inst.connect(wallet).initDealByValue(_tokenNum, _networkId, _recipient);
         await tx1.wait();
 
-        await expect(mastermost_inst.connect(wallet2).confirmDeal(hash)).to.be.reverted;
+        await expect(deal_inst.connect(wallet2).confirmDeal(hash)).to.be.reverted;
+
+    });
+
+    it("УДАЛЕНИЕ единственного валидатора невозможно", async function () {
+
+        await expect(mastermost_inst.connect(wallet).deleteValidator(wallet.address)).to.be.reverted;;
 
     });
 
